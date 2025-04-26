@@ -1,0 +1,239 @@
+from datetime import date, datetime, time
+
+from django.contrib import messages
+from django.shortcuts import render, get_object_or_404
+
+# Create your views here.
+from django.shortcuts import render, redirect
+from django.urls import reverse
+from django.utils import timezone
+from django.views.generic import TemplateView
+
+from .forms import CustomUserCreationForm, ReservationForm, TimeOnlyReservationForm
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+
+from .models import Room, Reservation
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from datetime import datetime, time, timedelta, date
+from .models import Room, Reservation
+
+def register(request):
+    if request.method == 'POST':
+        form = CustomUserCreationForm(request.POST)
+        if form.is_valid():
+            if form.cleaned_data['password1'] == form.cleaned_data['password2']:
+                user = form.save()
+                user.set_password(form.cleaned_data['password1'])
+                user.save()
+                login(request, user)  # profile
+                return redirect('home')  # redirect to home
+    else:
+        form = CustomUserCreationForm()
+    return render(request, 'registration/register.html', {'form': form})
+
+
+@login_required
+def home(request):
+    return render(request, 'home.html')
+
+
+from django.contrib.auth import logout
+from django.shortcuts import redirect
+
+def logout_view(request):
+
+    logout(request)
+    return redirect('login')  # or redirect to home
+
+class ProfileDetail(TemplateView):
+    template_name = 'profile_detail.html'
+
+@login_required
+def room_list(request):
+    rooms = Room.objects.all()
+    return render(request, 'room_list.html', {'rooms': rooms})
+
+@login_required
+def make_reservation(request, room_id):
+    room = get_object_or_404(Room, pk=room_id)
+    today = timezone.localdate()
+
+    # 获取今天已有预约时间段
+    reservations = Reservation.objects.filter(room=room, start_time__date=today)
+    booked_slots = set()
+    for res in reservations:
+        start_idx = (res.start_time.hour - 8) * 2 + (0 if res.start_time.minute < 30 else 1)
+        end_idx = (res.end_time.hour - 8) * 2 + (0 if res.end_time.minute < 30 else 1)
+        for i in range(start_idx, end_idx):
+            booked_slots.add(i)
+
+    # 构建 slots 数据：供模板渲染时间格子
+    slots = []
+    current = time(8, 0)
+    for i in range(20):
+        label = current.strftime("%H:%M")
+        status = "booked" if i in booked_slots else "available"
+        slots.append({"time": label, "status": status})
+        # 加 30 分钟
+        dt = datetime.combine(today, current) + timedelta(minutes=30)
+        current = dt.time()
+
+    # POST 请求：处理预约
+    if request.method == "POST":
+        start_str = request.POST.get("start_time")  # 格式如 "13:00"
+        end_str = request.POST.get("end_time")      # 格式如 "13:30"
+        if start_str and end_str:
+            try:
+                start_dt = datetime.combine(today, datetime.strptime(start_str, "%H:%M").time())
+                end_dt = datetime.combine(today, datetime.strptime(end_str, "%H:%M").time())
+
+
+                conflict = Reservation.objects.filter(
+                    room=room,
+                    start_time__lt=end_dt,
+                    end_time__gt=start_dt
+                ).exists()
+
+                if conflict:
+                    messages.error(request, "This time range is already booked. Please try another one.")
+                else:
+
+                    Reservation.objects.create(
+                        user=request.user,
+                        room=room,
+                        start_time=start_dt,
+                        end_time=end_dt
+                    )
+                    messages.success(request, "Reservation confirmed!")
+                    return redirect('make_reservation', room_id=room.id)
+            except ValueError:
+                messages.error(request, "Invalid time format.")
+
+    return render(request, "make_reservation.html", {
+        "room": room,
+        "slots": slots,
+        "today": today
+    })
+@login_required()
+def room_schedule(request, room_id):
+    room = get_object_or_404(Room, pk=room_id)
+    today = timezone.localdate()  # today's date in current timezone
+    # Get all reservations for this room today
+    reservations = Reservation.objects.filter(room=room, start_time__date=today)
+    # Determine which half-hour slots (indices 0-19) are booked
+    booked_slots = set()
+    for res in reservations:
+        # Compute slot indices for reservation's time range
+        start_idx = (res.start_time.hour - 8) * 2 + (0 if res.start_time.minute < 30 else 1)
+        end_idx   = (res.end_time.hour - 8) * 2 + (0 if res.end_time.minute < 30 else 1)
+        # Mark all slots from start_idx up to (end_idx - 1) as booked
+        for idx in range(start_idx, end_idx):
+            booked_slots.add(idx)
+    # Build list of slots with time labels and status
+    slots = []
+    current_time = time(8, 0)  # start at 08:00
+    for i in range(20):
+        slot_label = current_time.strftime("%H:%M")
+        status = "booked" if i in booked_slots else "available"
+        slots.append({"time": slot_label, "status": status})
+        # increment time by 30 minutes
+        hour, minute = current_time.hour, current_time.minute
+        minute += 30
+        if minute == 60:
+            hour += 1
+            minute = 0
+        current_time = time(hour, minute)
+    # Handle form submission (if user submitted a new booking)
+    if request.method == "POST":
+        start_time_str = request.POST.get("start_time")
+        end_time_str   = request.POST.get("end_time")
+
+        # Convert these strings to datetime objects (on today's date) and save new Reservation
+        # (Omitted: validation to ensure no conflict and creating the reservation)
+        # ...
+    # Render template with slots and room inforeturn redirect('make_reservation', room_id=room.id)
+    return render(request, "room_schedule.html", {"room": room, "slots": slots})
+
+@login_required
+def all_rooms_view(request):
+
+    date_str = request.GET.get("date")
+    if date_str:
+        try:
+            current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            current_date = timezone.localdate()
+    else:
+        current_date = timezone.localdate()
+
+    rooms = Room.objects.all()
+    all_data = []
+
+    for room in rooms:
+        reservations = Reservation.objects.filter(room=room, start_time__date=current_date)
+        booked = set()
+        for res in reservations:
+            start_idx = (res.start_time.hour - 8) * 2 + (0 if res.start_time.minute < 30 else 1)
+            end_idx = (res.end_time.hour - 8) * 2 + (0 if res.end_time.minute < 30 else 1)
+            for i in range(start_idx, end_idx):
+                booked.add(i)
+
+        slots = []
+        current = datetime.combine(current_date, time(8, 0))
+        now = timezone.localtime().replace(tzinfo=None)
+        for i in range(20):
+            label = current.time().strftime("%H:%M")
+            status = "booked" if i in booked else "available"
+            if current_date == timezone.localdate() and current + timedelta(minutes=30) <= now:
+                status = "past"
+            slots.append({"time": label, "status": status})
+            current += timedelta(minutes=30)
+        all_data.append({"room": room, "slots": slots})
+
+
+    if request.method == "POST":
+        room_id = request.POST.get("room_id")
+        start_str = request.POST.get("start_time")
+        end_str = request.POST.get("end_time")
+        date_str = request.POST.get("current_date")
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except:
+            selected_date = timezone.localdate()
+
+        if room_id and start_str and end_str:
+            room = get_object_or_404(Room, pk=room_id)
+            try:
+                start_dt = datetime.combine(selected_date, datetime.strptime(start_str, "%H:%M").time())
+                end_dt = datetime.combine(selected_date, datetime.strptime(end_str, "%H:%M").time())
+
+                conflict = Reservation.objects.filter(
+                    room=room,
+                    start_time__lt=end_dt,
+                    end_time__gt=start_dt
+                ).exists()
+
+                if not conflict:
+                    Reservation.objects.create(
+                        user=request.user,
+                        room=room,
+                        start_time=start_dt,
+                        end_time=end_dt
+                    )
+                    messages.success(request, f"Reserved on {selected_date} {start_str}–{end_str}")
+                    return redirect(f"{reverse('all_rooms')}?date={selected_date}")
+                else:
+                    messages.error(request, "Time slot is already booked.")
+            except:
+                messages.error(request, "Invalid time input.")
+
+    return render(request, "all_rooms.html", {
+        "all_data": all_data,
+        "selected_date": current_date,
+        "prev_date": current_date - timedelta(days=1),
+        "next_date": current_date + timedelta(days=1),
+        "today": timezone.localdate(),
+    })
