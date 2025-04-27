@@ -1,20 +1,11 @@
-from datetime import date, datetime, time
 
-import pytz
 from django.contrib import messages
-from django.shortcuts import render, get_object_or_404
-
-# Create your views here.
-from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils.timezone import localtime
 from django.views.generic import TemplateView
 
 from .forms import CustomUserCreationForm, ReservationForm, TimeOnlyReservationForm
 from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required
-
-from .models import Room, Reservation
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
@@ -49,8 +40,57 @@ def logout_view(request):
     logout(request)
     return redirect('login')  # or redirect to home
 
-class ProfileDetail(TemplateView):
+from django.views import View
+from django.contrib import messages
+
+class ProfileDetail(View):
     template_name = 'profile_detail.html'
+
+    def get(self, request):
+        reservations = Reservation.objects.filter(user=request.user).order_by('start_time')
+        return render(request, self.template_name, {'reservations': reservations})
+
+    def post(self, request):
+        action = request.POST.get('action')
+        res_id = request.POST.get('reservation_id')
+
+        if action and res_id:
+            reservation = get_object_or_404(Reservation, id=res_id, user=request.user)
+
+            if action == 'cancel':
+                reservation.delete()
+                messages.success(request, "Reservation cancelled successfully!")
+            elif action == 'edit':
+                new_start = request.POST.get('start_time')
+                new_end = request.POST.get('end_time')
+
+                try:
+                    new_start_dt = datetime.combine(reservation.start_time.date(), datetime.strptime(new_start, "%H:%M").time())
+                    new_end_dt = datetime.combine(reservation.start_time.date(), datetime.strptime(new_end, "%H:%M").time())
+
+                    new_start_dt = timezone.make_aware(new_start_dt)
+                    new_end_dt = timezone.make_aware(new_end_dt)
+
+                    # 检查冲突
+                    conflict = Reservation.objects.filter(
+                        room=reservation.room,
+                        start_time__lt=new_end_dt,
+                        end_time__gt=new_start_dt
+                    ).exclude(id=reservation.id).exists()
+
+                    if conflict:
+                        messages.error(request, "The selected time conflicts with another reservation.")
+                    else:
+                        reservation.start_time = new_start_dt
+                        reservation.end_time = new_end_dt
+                        reservation.save()
+                        messages.success(request, "Reservation updated successfully!")
+
+                except ValueError:
+                    messages.error(request, "Invalid time format.")
+
+        return redirect('profile_detail')
+
 
 @login_required
 def room_list(request):
