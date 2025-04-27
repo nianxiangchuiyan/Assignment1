@@ -1,10 +1,9 @@
-
 {% extends "base.html" %}
-{% load timeslots %}
-{% block title %}All Rooms{% endblock %}
-{% block content %}
-<h2 class="mb-3">All Rooms</h2>
+{% load static %}
 
+{% block title %}All Rooms{% endblock %}
+
+{% block content %}
 <h2 class="mb-3 text-center">
   {% if selected_date > today %}
     <a href="?date={{ prev_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">&larr; Previous</a>
@@ -12,32 +11,33 @@
     <button class="btn btn-outline-secondary btn-sm" disabled>&larr; Previous</button>
   {% endif %}
 
-  <span class="mx-3">{{ selected_date|date:"Y-m-d" }}</span>
+  <span class="mx-3">{{ selected_date|date:'Y-m-d' }}</span>
 
   <a href="?date={{ next_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">Next &rarr;</a>
 </h2>
+
 <table class="table table-bordered text-center">
   <thead>
     <tr>
       <th style="width: 250px;">Room</th>
-        {% for i in 0|to:20 %}
-            {% with i|multiply:30 as offset %}
-                <th>{{ "08:00"|add_time:offset }}</th>
-            {% endwith %}
-        {% endfor %}
+      {% for time in slots_header %}
+        <th>{{ time }}</th>
+      {% endfor %}
     </tr>
   </thead>
   <tbody>
     {% for data in all_data %}
       <tr>
-        <td>
-          <strong>{{ data.room.name }}</strong><br>
-
-        </td>
+        <td><strong>{{ data.room.name }}</strong></td>
         {% for slot in data.slots %}
           <td>
-            <div class="p-2 rounded-square {% if slot.status == 'booked' %} bg-danger {% elif slot.status == 'past' %}  bg-secondary  {% else %} bg-success slot-available {% endif %}"
-                data-room="{{ data.room.id }}" data-time="{{ slot.time }}">
+            <div class="p-2 rounded-square
+                {% if slot.status == 'booked' %} bg-danger
+                {% elif slot.status == 'past' %} bg-secondary
+                {% else %} bg-success slot-available {% endif %}"
+                {% if slot.status == 'available' %}
+                data-room="{{ data.room.id }}" data-time="{{ slot.time }}"
+                {% endif %}>
             </div>
           </td>
         {% endfor %}

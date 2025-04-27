@@ -1,12 +1,13 @@
 from datetime import date, datetime, time
 
+import pytz
 from django.contrib import messages
 from django.shortcuts import render, get_object_or_404
 
 # Create your views here.
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.utils import timezone
+from django.utils.timezone import localtime
 from django.views.generic import TemplateView
 
 from .forms import CustomUserCreationForm, ReservationForm, TimeOnlyReservationForm
@@ -64,9 +65,15 @@ def make_reservation(request, room_id):
     # 获取今天已有预约时间段
     reservations = Reservation.objects.filter(room=room, start_time__date=today)
     booked_slots = set()
+
     for res in reservations:
-        start_idx = (res.start_time.hour - 8) * 2 + (0 if res.start_time.minute < 30 else 1)
-        end_idx = (res.end_time.hour - 8) * 2 + (0 if res.end_time.minute < 30 else 1)
+
+        start_local = localtime(res.start_time)
+        end_local = localtime(res.end_time)
+
+        start_idx = (start_local.hour - 8) * 2 + (0 if start_local.minute < 30 else 1)
+        end_idx = (end_local.hour - 8) * 2 + (0 if end_local.minute < 30 else 1)
+
         for i in range(start_idx, end_idx):
             booked_slots.add(i)
 
@@ -156,59 +163,74 @@ def room_schedule(request, room_id):
         # ...
     # Render template with slots and room inforeturn redirect('make_reservation', room_id=room.id)
     return render(request, "room_schedule.html", {"room": room, "slots": slots})
-
 @login_required
 def all_rooms_view(request):
-
     date_str = request.GET.get("date")
     if date_str:
         try:
-            current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            current_date = timezone.localdate()
+            selected_date = timezone.localdate()
     else:
-        current_date = timezone.localdate()
+        selected_date = timezone.localdate()
 
     rooms = Room.objects.all()
     all_data = []
 
+    now = timezone.localtime().replace(tzinfo=None)
+
     for room in rooms:
-        reservations = Reservation.objects.filter(room=room, start_time__date=current_date)
+        reservations = Reservation.objects.filter(room=room, start_time__date=selected_date)
         booked = set()
         for res in reservations:
-            start_idx = (res.start_time.hour - 8) * 2 + (0 if res.start_time.minute < 30 else 1)
-            end_idx = (res.end_time.hour - 8) * 2 + (0 if res.end_time.minute < 30 else 1)
+            start_local = localtime(res.start_time)
+            end_local = localtime(res.end_time)
+
+            start_idx = (start_local.hour - 8) * 2 + (0 if start_local.minute < 30 else 1)
+            end_idx = (end_local.hour - 8) * 2 + (0 if end_local.minute < 30 else 1)
+
             for i in range(start_idx, end_idx):
                 booked.add(i)
 
         slots = []
-        current = datetime.combine(current_date, time(8, 0))
-        now = timezone.localtime().replace(tzinfo=None)
+        current = datetime.combine(selected_date, time(8, 0))
         for i in range(20):
             label = current.time().strftime("%H:%M")
             status = "booked" if i in booked else "available"
-            if current_date == timezone.localdate() and current + timedelta(minutes=30) <= now:
+
+            if selected_date == timezone.localdate() and (current + timedelta(minutes=30)) <= now:
                 status = "past"
+
             slots.append({"time": label, "status": status})
             current += timedelta(minutes=30)
+
         all_data.append({"room": room, "slots": slots})
 
+    slots_header = []
+    start_time = datetime.strptime("08:00", "%H:%M")
+    for i in range(20):
+        slots_header.append((start_time + timedelta(minutes=i*30)).strftime("%H:%M"))
 
     if request.method == "POST":
         room_id = request.POST.get("room_id")
         start_str = request.POST.get("start_time")
         end_str = request.POST.get("end_time")
         date_str = request.POST.get("current_date")
+
         try:
             selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except:
-            selected_date = timezone.localdate()
-
+        except ValueError:
+            if selected_date != timezone.localdate():
+                selected_date = selected_date
         if room_id and start_str and end_str:
             room = get_object_or_404(Room, pk=room_id)
             try:
-                start_dt = datetime.combine(selected_date, datetime.strptime(start_str, "%H:%M").time())
-                end_dt = datetime.combine(selected_date, datetime.strptime(end_str, "%H:%M").time())
+                start_naive = datetime.combine(selected_date, datetime.strptime(start_str, "%H:%M").time())
+                end_naive = datetime.combine(selected_date, datetime.strptime(end_str, "%H:%M").time())
+
+                # timezone aware
+                start_dt = timezone.make_aware(start_naive)
+                end_dt = timezone.make_aware(end_naive)
 
                 conflict = Reservation.objects.filter(
                     room=room,
@@ -223,17 +245,19 @@ def all_rooms_view(request):
                         start_time=start_dt,
                         end_time=end_dt
                     )
-                    messages.success(request, f"Reserved on {selected_date} {start_str}–{end_str}")
+                    messages.success(request, f"Reservation successful!")
                     return redirect(f"{reverse('all_rooms')}?date={selected_date}")
                 else:
-                    messages.error(request, "Time slot is already booked.")
-            except:
+                    messages.error(request, "Time slot already booked.")
+            except Exception as e:
+                print(e)
                 messages.error(request, "Invalid time input.")
 
     return render(request, "all_rooms.html", {
         "all_data": all_data,
-        "selected_date": current_date,
-        "prev_date": current_date - timedelta(days=1),
-        "next_date": current_date + timedelta(days=1),
+        "slots_header": slots_header,
+        "selected_date": selected_date,
+        "prev_date": selected_date - timedelta(days=1),
+        "next_date": selected_date + timedelta(days=1),
         "today": timezone.localdate(),
     })
