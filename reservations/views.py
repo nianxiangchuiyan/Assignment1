@@ -48,7 +48,21 @@ class ProfileDetail(View):
 
     def get(self, request):
         reservations = Reservation.objects.filter(user=request.user).order_by('start_time')
-        return render(request, self.template_name, {'reservations': reservations})
+
+        # 生成标准时间段列表
+        time_list = []
+        now = timezone.localtime()
+        today = timezone.localdate()
+
+        start = datetime.combine(today, time(8, 0))
+        for i in range(21):  # 20个半小时格子+18:00
+            slot_time = start + timedelta(minutes=i*30)
+            if today == now.date() and slot_time.time() <= now.time():
+                continue  # 如果是今天且已经过去，就跳过
+            time_list.append(slot_time.strftime("%H:%M"))
+            return render(request, self.template_name, {
+                'reservations': reservations,
+                'time_options': time_list,})
 
     def post(self, request):
         action = request.POST.get('action')
