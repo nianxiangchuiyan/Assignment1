@@ -60,9 +60,12 @@ class ProfileDetail(View):
             if today == now.date() and slot_time.time() <= now.time():
                 continue  # 如果是今天且已经过去，就跳过
             time_list.append(slot_time.strftime("%H:%M"))
-            return render(request, self.template_name, {
+        return render(request, self.template_name, {
                 'reservations': reservations,
-                'time_options': time_list,})
+                'time_options': time_list,
+                'time_options_start': time_list[:-1],}
+        )
+
 
     def post(self, request):
         action = request.POST.get('action')

@@ -39,7 +39,7 @@
           <input type="hidden" name="reservation_id" value="{{ res.id }}">
            <!-- Start time select -->
           <select name="start_time" class="form-select d-inline w-auto" required>
-            {% for t in time_options %}
+            {% for t in time_options_start %}
               <option value="{{ t }}" {% if t == res.start_time|time:"H:i" %}selected{% endif %}>{{ t }}</option>
             {% endfor %}
           </select>
