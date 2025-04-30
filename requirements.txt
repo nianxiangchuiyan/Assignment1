@@ -1,5 +1,5 @@
 Django>=5.2
-daphne
+
 asgiref==3.8.1
 certifi==2025.4.26
 charset-normalizer==3.4.1
@@ -13,3 +13,5 @@ pytz==2025.2
 requests==2.32.3
 sqlparse==0.5.3
 urllib3==2.4.0
+daphne>=4.0
+gunicorn>=20.1
