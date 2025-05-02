@@ -88,8 +88,7 @@ WSGI_APPLICATION = 'Assignment1.wsgi.application'
 #
 # }
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL')
+    'default': dj_database_url.config(default=os.environ.get('DATABASE_URL')
     )
 }
 
@@ -141,4 +140,4 @@ LOGIN_REDIRECT_URL = 'home'
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
+CSRF_TRUSTED_ORIGINS = ['http://*']

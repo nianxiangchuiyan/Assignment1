@@ -17,3 +17,4 @@ daphne>=4.0
 gunicorn>=20.1
 psycopg2-binary
 dj-database-url
+python-dotenv~=1.1.0
