@@ -46,7 +46,7 @@
 
           <!-- End time select -->
           <select name="end_time" class="form-select d-inline w-auto" required>
-            {% for t in time_options %}
+            {% for t in time_options_end %}
               <option value="{{ t }}" {% if t == res.end_time|time:"H:i" %}selected{% endif %}>{{ t }}</option>
             {% endfor %}
           </select>

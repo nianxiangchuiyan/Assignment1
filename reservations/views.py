@@ -63,6 +63,7 @@ class ProfileDetail(View):
         return render(request, self.template_name, {
                 'reservations': reservations,
                 'time_options': time_list,
+                'time_options_end': time_list[1:],
                 'time_options_start': time_list[:-1],}
         )
 
