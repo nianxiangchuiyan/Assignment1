@@ -1,7 +1,7 @@
 
 from django.contrib import messages
 from django.urls import reverse
-from django.utils.timezone import localtime
+from django.utils.timezone import localtime, make_aware
 from django.views.generic import TemplateView
 
 from .forms import CustomUserCreationForm, ReservationForm, TimeOnlyReservationForm
@@ -54,10 +54,10 @@ class ProfileDetail(View):
         now = timezone.localtime()
         today = timezone.localdate()
 
-        start = datetime.combine(today, time(8, 0))
+        start = make_aware(datetime.combine(today, time(8, 0)))
         for i in range(21):  # 20个半小时格子+18:00
             slot_time = start + timedelta(minutes=i*30)
-            if today == now.date() and slot_time.time() <= now.time():
+            if today == now.date() and slot_time <= now - timedelta(minutes=30):
                 continue  # 如果是今天且已经过去，就跳过
             time_list.append(slot_time.strftime("%H:%M"))
         return render(request, self.template_name, {
